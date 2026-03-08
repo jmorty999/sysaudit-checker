@@ -1,4 +1,6 @@
 import subprocess
+import os
+import plistlib
 
 from sysaudit.core.models import CheckResult
 
@@ -216,12 +218,51 @@ def check_sip():
             status="error",
             message=f"Impossible de vérifier SIP : {error}"
         )
+def check_xprotect():
+    possible_paths = [
+        "/var/protected/xprotect/XProtect.bundle/Contents/Info.plist",
+        "/Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist",
+        "/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist",
+    ]
 
+    try:
+        found_path = None
+
+        for plist_path in possible_paths:
+            if os.path.exists(plist_path):
+                found_path = plist_path
+                break
+
+        if not found_path:
+            return CheckResult(
+                name="xprotect_present",
+                status="fail",
+                message="XProtect bundle introuvable dans les emplacements connus"
+            )
+
+        with open(found_path, "rb") as plist_file:
+            plist_data = plistlib.load(plist_file)
+
+        version = plist_data.get("CFBundleShortVersionString", "Version inconnue")
+
+        return CheckResult(
+            name="xprotect_present",
+            status="ok",
+            message=f"XProtect présent (version {version}, chemin {found_path})"
+        )
+
+    except Exception as error:
+        return CheckResult(
+            name="xprotect_present",
+            status="error",
+            message=f"Impossible de vérifier XProtect : {error}"
+        )
 
 def run_checks():
     return [
         check_firewall(),
         check_filevault(),
         check_gatekeeper(),
-        check_sip()
+        check_sip(),
+        check_xprotect()
     ]
