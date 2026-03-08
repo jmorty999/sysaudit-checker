@@ -55,13 +55,62 @@ def check_firewall():
             message=f"Impossible de vérifier le firewall : {error}"
         )
 
+#checks for filevault
+def check_filevault():
+    command = ["fdesetup", "status"]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True
+        )
+
+        output = (result.stdout or result.stderr).strip().lower()
+
+        if result.returncode != 0:
+            return CheckResult(
+                name="filevault_enabled",
+                status="error",
+                message=f"Commande échouée : {output}"
+            )
+
+        if "filevault is on" in output:
+            return CheckResult(
+                name="filevault_enabled",
+                status="ok",
+                message="FileVault est activé"
+            )
+
+        if "filevault is off" in output:
+            return CheckResult(
+                name="filevault_enabled",
+                status="fail",
+                message="FileVault est désactivé"
+            )
+
+        return CheckResult(
+            name="filevault_enabled",
+            status="error",
+            message=f"Réponse inattendue : {output}"
+        )
+
+    except FileNotFoundError:
+        return CheckResult(
+            name="filevault_enabled",
+            status="error",
+            message="Commande fdesetup introuvable sur ce système"
+        )
+    except Exception as error:
+        return CheckResult(
+            name="filevault_enabled",
+            status="error",
+            message=f"Impossible de vérifier FileVault : {error}"
+        )
+
 
 def run_checks():
     return [
-        check_firewall()
-    ]
-
-def run_checks():
-    return [
-        check_firewall()
+        check_firewall(),
+        check_filevault()
     ]
