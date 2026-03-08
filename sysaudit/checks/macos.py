@@ -108,9 +108,120 @@ def check_filevault():
             message=f"Impossible de vérifier FileVault : {error}"
         )
 
+#gatekeeper =/= sip
+#gatekeeper = controls what the apps have the right to execute
+#sip = protects the critical parts of the macos system
+#xip = silent anti-virus of macos
+def check_gatekeeper():
+    command = ["spctl", "--status"]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True
+        )
+
+        output = (result.stdout or result.stderr).strip().lower()
+
+        if result.returncode != 0:
+            return CheckResult(
+                name="gatekeeper_enabled",
+                status="error",
+                message=f"Commande échouée : {output}"
+            )
+
+        if "assessments enabled" in output:
+            return CheckResult(
+                name="gatekeeper_enabled",
+                status="ok",
+                message="Gatekeeper est activé"
+            )
+
+        if "assessments disabled" in output:
+            return CheckResult(
+                name="gatekeeper_enabled",
+                status="fail",
+                message="Gatekeeper est désactivé"
+            )
+
+        return CheckResult(
+            name="gatekeeper_enabled",
+            status="error",
+            message=f"Réponse inattendue : {output}"
+        )
+
+    except FileNotFoundError:
+        return CheckResult(
+            name="gatekeeper_enabled",
+            status="error",
+            message="Commande spctl introuvable sur ce système"
+        )
+    except Exception as error:
+        return CheckResult(
+            name="gatekeeper_enabled",
+            status="error",
+            message=f"Impossible de vérifier Gatekeeper : {error}"
+        )
+
+
+def check_sip():
+    command = ["csrutil", "status"]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True
+        )
+
+        output = (result.stdout or result.stderr).strip().lower()
+
+        if result.returncode != 0:
+            return CheckResult(
+                name="sip_enabled",
+                status="error",
+                message=f"Commande échouée : {output}"
+            )
+
+        if "enabled" in output:
+            return CheckResult(
+                name="sip_enabled",
+                status="ok",
+                message="System Integrity Protection (SIP) est activé"
+            )
+
+        if "disabled" in output:
+            return CheckResult(
+                name="sip_enabled",
+                status="fail",
+                message="System Integrity Protection (SIP) est désactivé"
+            )
+
+        return CheckResult(
+            name="sip_enabled",
+            status="error",
+            message=f"Réponse inattendue : {output}"
+        )
+
+    except FileNotFoundError:
+        return CheckResult(
+            name="sip_enabled",
+            status="error",
+            message="Commande csrutil introuvable sur ce système"
+        )
+    except Exception as error:
+        return CheckResult(
+            name="sip_enabled",
+            status="error",
+            message=f"Impossible de vérifier SIP : {error}"
+        )
+
 
 def run_checks():
     return [
         check_firewall(),
-        check_filevault()
+        check_filevault(),
+        check_gatekeeper(),
+        check_sip()
     ]
