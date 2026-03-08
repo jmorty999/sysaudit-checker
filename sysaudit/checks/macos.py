@@ -1,31 +1,53 @@
+import subprocess
+
 from sysaudit.core.models import CheckResult
-#specific checks for macos
+
 
 def check_firewall():
-    try:
-        #execute a system command
+    command = ["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"]
+
+    try: #execute a system command
         result = subprocess.run(
-            ["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"],
-            capture_output=True, #Launches the macOS command that queries the state of the firewall.
-            text=True,
-            check=True #Returns the text as a string, not in bytes.
+            command,
+            capture_output=True, ##Launches the macOS command that queries the state of the firewall.
+            text=True
         )
 
-        output = result.stdout.strip().lower() #launches an exception in case of failure
+        output = (result.stdout or result.stderr).strip().lower() ##launches an exception in case of failure
 
-        if "enabled" in output: #if "enabled", the firewall is off
+        if result.returncode != 0:
+            return CheckResult(
+                name="firewall_enabled",
+                status="error",
+                message=f"Commande échouée : {output}"
+            )
+
+        if "enabled" in output:
             return CheckResult(
                 name="firewall_enabled",
                 status="ok",
                 message="Le firewall macOS est activé"
             )
 
+        if "disabled" in output:
+            return CheckResult(
+                name="firewall_enabled",
+                status="fail",
+                message="Le firewall macOS est désactivé"
+            )
+
         return CheckResult(
             name="firewall_enabled",
-            status="fail",
-            message="Le firewall macOS est désactivé"
+            status="error",
+            message=f"Réponse inattendue : {output}"
         )
 
+    except FileNotFoundError:
+        return CheckResult(
+            name="firewall_enabled",
+            status="error",
+            message="Commande firewall introuvable sur ce système"
+        )
     except Exception as error:
         return CheckResult(
             name="firewall_enabled",
@@ -33,6 +55,11 @@ def check_firewall():
             message=f"Impossible de vérifier le firewall : {error}"
         )
 
+
+def run_checks():
+    return [
+        check_firewall()
+    ]
 
 def run_checks():
     return [
