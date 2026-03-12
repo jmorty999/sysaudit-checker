@@ -5,133 +5,81 @@ from sysaudit.core.models import CheckResult
 from sysaudit.core.util import run_command
 
 
-def check_firewall():
-    returncode, output = run_command(
-        ["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"]
-    )
+def command_check(name, command, ok_patterns, fail_patterns, ok_message, fail_message):
+    returncode, output = run_command(command)
     output_lower = output.lower()
 
     if returncode != 0:
         return CheckResult(
-            name="firewall_enabled",
+            name=name,
             status="error",
             message=f"Commande échouée : {output}"
         )
 
-    if "enabled" in output_lower:
-        return CheckResult(
-            name="firewall_enabled",
-            status="ok",
-            message="Le firewall macOS est activé"
-        )
+    for pattern in ok_patterns:
+        if pattern in output_lower:
+            return CheckResult(
+                name=name,
+                status="ok",
+                message=ok_message
+            )
 
-    if "disabled" in output_lower:
-        return CheckResult(
-            name="firewall_enabled",
-            status="fail",
-            message="Le firewall macOS est désactivé"
-        )
+    for pattern in fail_patterns:
+        if pattern in output_lower:
+            return CheckResult(
+                name=name,
+                status="fail",
+                message=fail_message
+            )
 
     return CheckResult(
-        name="firewall_enabled",
+        name=name,
         status="error",
         message=f"Réponse inattendue : {output}"
+    )
+
+
+def check_firewall():
+    return command_check(
+        name="firewall_enabled",
+        command=["/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"],
+        ok_patterns=["enabled"],
+        fail_patterns=["disabled"],
+        ok_message="Le firewall macOS est activé",
+        fail_message="Le firewall macOS est désactivé"
     )
 
 
 def check_filevault():
-    returncode, output = run_command(["fdesetup", "status"])
-    output_lower = output.lower()
-
-    if returncode != 0:
-        return CheckResult(
-            name="filevault_enabled",
-            status="error",
-            message=f"Commande échouée : {output}"
-        )
-
-    if "filevault is on" in output_lower:
-        return CheckResult(
-            name="filevault_enabled",
-            status="ok",
-            message="FileVault est activé"
-        )
-
-    if "filevault is off" in output_lower:
-        return CheckResult(
-            name="filevault_enabled",
-            status="fail",
-            message="FileVault est désactivé"
-        )
-
-    return CheckResult(
+    return command_check(
         name="filevault_enabled",
-        status="error",
-        message=f"Réponse inattendue : {output}"
+        command=["fdesetup", "status"],
+        ok_patterns=["filevault is on"],
+        fail_patterns=["filevault is off"],
+        ok_message="FileVault est activé",
+        fail_message="FileVault est désactivé"
     )
 
 
 def check_gatekeeper():
-    returncode, output = run_command(["spctl", "--status"])
-    output_lower = output.lower()
-
-    if returncode != 0:
-        return CheckResult(
-            name="gatekeeper_enabled",
-            status="error",
-            message=f"Commande échouée : {output}"
-        )
-
-    if "assessments enabled" in output_lower:
-        return CheckResult(
-            name="gatekeeper_enabled",
-            status="ok",
-            message="Gatekeeper est activé"
-        )
-
-    if "assessments disabled" in output_lower:
-        return CheckResult(
-            name="gatekeeper_enabled",
-            status="fail",
-            message="Gatekeeper est désactivé"
-        )
-
-    return CheckResult(
+    return command_check(
         name="gatekeeper_enabled",
-        status="error",
-        message=f"Réponse inattendue : {output}"
+        command=["spctl", "--status"],
+        ok_patterns=["assessments enabled"],
+        fail_patterns=["assessments disabled"],
+        ok_message="Gatekeeper est activé",
+        fail_message="Gatekeeper est désactivé"
     )
 
 
 def check_sip():
-    returncode, output = run_command(["csrutil", "status"])
-    output_lower = output.lower()
-
-    if returncode != 0:
-        return CheckResult(
-            name="sip_enabled",
-            status="error",
-            message=f"Commande échouée : {output}"
-        )
-
-    if "enabled" in output_lower:
-        return CheckResult(
-            name="sip_enabled",
-            status="ok",
-            message="System Integrity Protection (SIP) est activé"
-        )
-
-    if "disabled" in output_lower:
-        return CheckResult(
-            name="sip_enabled",
-            status="fail",
-            message="System Integrity Protection (SIP) est désactivé"
-        )
-
-    return CheckResult(
+    return command_check(
         name="sip_enabled",
-        status="error",
-        message=f"Réponse inattendue : {output}"
+        command=["csrutil", "status"],
+        ok_patterns=["enabled"],
+        fail_patterns=["disabled"],
+        ok_message="System Integrity Protection (SIP) est activé",
+        fail_message="System Integrity Protection (SIP) est désactivé"
     )
 
 
