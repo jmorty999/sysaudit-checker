@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="5e0a4f2a-bde3-4e1d-a638-c82c5cc1ad29" name="Changes" comment="" />
+    <list default="true" id="5e0a4f2a-bde3-4e1d-a638-c82c5cc1ad29" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sysaudit/checks/linux.py" beforeDir="false" afterPath="$PROJECT_DIR$/sysaudit/checks/linux.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/sysaudit/core/util.py" beforeDir="false" afterPath="$PROJECT_DIR$/sysaudit/core/util.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -39,6 +43,7 @@
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "git-widget-placeholder": "develop",
     "kotlin-language-version-configured": "true",
+    "nodejs_package_manager_path": "npm",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -46,6 +51,7 @@
     <attachedChunks>
       <set>
         <option value="bundled-jdk-30f59d01ecdd-2fc7cc6b9a17-intellij.indexing.shared.core-IU-253.31033.145" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-IU-253.31033.145" />
       </set>
     </attachedChunks>
   </component>
@@ -57,6 +63,7 @@
       <option name="presentableId" value="Default" />
       <updated>1762425960564</updated>
       <workItem from="1773007686490" duration="2300000" />
+      <workItem from="1773142558648" duration="2401000" />
     </task>
     <servers />
   </component>
