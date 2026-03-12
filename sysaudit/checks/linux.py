@@ -1,14 +1,25 @@
 import os
-
 from sysaudit.core.models import CheckResult
 from sysaudit.core.util import command_check, run_command
-#checks must be validated on a linux env
 
+# Liste pour enregistrer automatiquement les fonctions de check
+CHECKS = []
+
+def register_check(func):
+    CHECKS.append(func)
+    return func
+
+def _has_cmd(cmd):
+    """Utilitaire interne pour vérifier si une commande existe."""
+    rc, _ = run_command(["sh", "-c", f"command -v {cmd}"])
+    return rc == 0
+
+@register_check
 def check_firewall():
-    nft_returncode, nft_output = run_command(["sh", "-c", "command -v nft"])
-    if nft_returncode == 0 and nft_output:
+    # 1. NFTABLES
+    if _has_cmd("nft"):
         return command_check(
-            name="firewall_enabled",
+            name="firewall_nftables",
             command=["systemctl", "is-active", "nftables"],
             ok_patterns=["active"],
             fail_patterns=["inactive", "failed"],
@@ -16,10 +27,10 @@ def check_firewall():
             fail_message="Le firewall nftables n'est pas actif"
         )
 
-    ufw_returncode, ufw_output = run_command(["sh", "-c", "command -v ufw"])
-    if ufw_returncode == 0 and ufw_output:
+    # 2. UFW
+    if _has_cmd("ufw"):
         return command_check(
-            name="firewall_enabled",
+            name="firewall_ufw",
             command=["ufw", "status"],
             ok_patterns=["status: active"],
             fail_patterns=["status: inactive"],
@@ -27,10 +38,10 @@ def check_firewall():
             fail_message="Le firewall UFW est inactif"
         )
 
-    firewalld_returncode, firewalld_output = run_command(["sh", "-c", "command -v firewall-cmd"])
-    if firewalld_returncode == 0 and firewalld_output:
+    # 3. FIREWALLD
+    if _has_cmd("firewall-cmd"):
         return command_check(
-            name="firewall_enabled",
+            name="firewall_firewalld",
             command=["systemctl", "is-active", "firewalld"],
             ok_patterns=["active"],
             fail_patterns=["inactive", "failed"],
@@ -41,165 +52,92 @@ def check_firewall():
     return CheckResult(
         name="firewall_enabled",
         status="error",
-        message="Aucun outil de firewall connu détecté (nftables, ufw, firewalld)"
+        message="Aucun outil de firewall reconnu (nft, ufw, firewalld)"
     )
 
-
+@register_check
 def check_selinux():
-    returncode, output = run_command(["sh", "-c", "command -v getenforce"])
-    if returncode != 0 or not output:
-        return CheckResult(
-            name="selinux_enabled",
-            status="info",
-            message="SELinux non disponible sur ce système"
-        )
+    if not _has_cmd("getenforce"):
+        return CheckResult(name="selinux", status="info", message="SELinux non disponible")
 
     return command_check(
-        name="selinux_enabled",
+        name="selinux_mode",
         command=["getenforce"],
-        ok_patterns=["enforcing"],
-        fail_patterns=["disabled", "permissive"],
-        ok_message="SELinux est actif en mode enforcing",
-        fail_message="SELinux n'est pas en mode enforcing"
+        ok_patterns=["Enforcing"],
+        fail_patterns=["Permissive", "Disabled"],
+        ok_message="SELinux est en mode Enforcing",
+        fail_message="SELinux n'est pas restrictif"
     )
 
-
+@register_check
 def check_apparmor():
-    if not os.path.exists("/sys/module/apparmor/parameters/enabled"):
-        return CheckResult(
-            name="apparmor_enabled",
-            status="info",
-            message="AppArmor non disponible sur ce système"
-        )
+    path = "/sys/module/apparmor/parameters/enabled"
+    if not os.path.exists(path):
+        return CheckResult(name="apparmor", status="info", message="AppArmor non disponible")
 
     try:
-        with open("/sys/module/apparmor/parameters/enabled", "r", encoding="utf-8") as file:
-            value = file.read().strip().lower()
-
-        if value in ("y", "yes", "1"):
-            return CheckResult(
-                name="apparmor_enabled",
-                status="ok",
-                message="AppArmor est activé"
-            )
+        with open(path, "r") as f:
+            enabled = f.read().strip().lower() in ("y", "1")
 
         return CheckResult(
             name="apparmor_enabled",
-            status="fail",
-            message="AppArmor est désactivé"
+            status="ok" if enabled else "fail",
+            message="AppArmor est activé" if enabled else "AppArmor est désactivé"
         )
+    except Exception as e:
+        return CheckResult(name="apparmor", status="error", message=f"Erreur lecture AppArmor: {e}")
 
-    except Exception as error:
-        return CheckResult(
-            name="apparmor_enabled",
-            status="error",
-            message=f"Impossible de vérifier AppArmor : {error}"
-        )
-
-
+@register_check
 def check_automatic_updates():
-    if os.path.exists("/etc/apt/apt.conf.d/20auto-upgrades"):
+    # Test pour Debian/Ubuntu (APT)
+    apt_conf = "/etc/apt/apt.conf.d/20auto-upgrades"
+    if os.path.exists(apt_conf):
         try:
-            with open("/etc/apt/apt.conf.d/20auto-upgrades", "r", encoding="utf-8") as file:
-                content = file.read().lower()
-
-            if 'apt::periodic::unattended-upgrade "1"' in content:
-                return CheckResult(
-                    name="automatic_updates_enabled",
-                    status="ok",
-                    message="Les mises à jour automatiques APT sont activées"
-                )
-
+            with open(apt_conf, "r") as f:
+                content = f.read()
+            enabled = 'APT::Periodic::Unattended-Upgrade "1"' in content
             return CheckResult(
-                name="automatic_updates_enabled",
-                status="fail",
-                message="Les mises à jour automatiques APT sont désactivées"
+                name="updates_apt",
+                status="ok" if enabled else "fail",
+                message="Mises à jour APT auto activées" if enabled else "Mises à jour APT auto désactivées"
             )
+        except Exception: pass
 
-        except Exception as error:
-            return CheckResult(
-                name="automatic_updates_enabled",
-                status="error",
-                message=f"Impossible de lire la configuration APT : {error}"
-            )
-
-    dnf_returncode, dnf_output = run_command(["sh", "-c", "command -v dnf"])
-    if dnf_returncode == 0 and dnf_output:
+    # Test pour RHEL/Fedora (DNF)
+    if _has_cmd("dnf"):
         return command_check(
-            name="automatic_updates_enabled",
+            name="updates_dnf",
             command=["systemctl", "is-enabled", "dnf-automatic.timer"],
             ok_patterns=["enabled"],
             fail_patterns=["disabled"],
-            ok_message="Les mises à jour automatiques DNF sont activées",
-            fail_message="Les mises à jour automatiques DNF sont désactivées"
+            ok_message="Mises à jour DNF auto activées",
+            fail_message="Mises à jour DNF auto désactivées"
         )
 
-    return CheckResult(
-        name="automatic_updates_enabled",
-        status="info",
-        message="Gestionnaire de mises à jour automatiques non reconnu"
-    )
+    return CheckResult(name="updates_auto", status="info", message="Gestionnaire d'auto-updates non détecté")
 
-
+@register_check
 def check_ssh_root_login():
-    sshd_config = "/etc/ssh/sshd_config"
+    if not _has_cmd("sshd"):
+        return CheckResult(name="ssh_root", status="info", message="Service SSH non détecté")
 
-    if not os.path.exists(sshd_config):
-        return CheckResult(
-            name="ssh_root_login_disabled",
-            status="info",
-            message="OpenSSH n'est pas installé ou sshd_config est absent"
-        )
+    # Utilisation de sshd -T pour obtenir la config REELLE calculée par le système
+    rc, output = run_command(["sshd", "-T"])
+    if rc != 0:
+        return CheckResult(name="ssh_root", status="error", message="Erreur lors de l'appel à sshd -T")
 
-    try:
-        with open(sshd_config, "r", encoding="utf-8") as file:
-            lines = file.readlines()
+    for line in output.splitlines():
+        if line.lower().startswith("permitrootlogin"):
+            value = line.split()[-1].lower()
+            if value == "no":
+                return CheckResult(name="ssh_root", status="ok", message="Accès Root SSH interdit (Sécurisé)")
+            return CheckResult(name="ssh_root", status="fail", message=f"Accès Root SSH autorisé ({value})")
 
-        effective_value = None
-
-        for raw_line in lines:
-            line = raw_line.strip()
-
-            if not line or line.startswith("#"):
-                continue
-
-            parts = line.split()
-            if len(parts) >= 2 and parts[0].lower() == "permitrootlogin":
-                effective_value = parts[1].lower()
-
-        if effective_value in ("no",):
-            return CheckResult(
-                name="ssh_root_login_disabled",
-                status="ok",
-                message="La connexion SSH root est désactivée"
-            )
-
-        if effective_value in ("yes", "prohibit-password", "forced-commands-only", "without-password"):
-            return CheckResult(
-                name="ssh_root_login_disabled",
-                status="fail",
-                message="La connexion SSH root n'est pas totalement désactivée"
-            )
-
-        return CheckResult(
-            name="ssh_root_login_disabled",
-            status="info",
-            message="Directive PermitRootLogin absente ou non interprétable"
-        )
-
-    except Exception as error:
-        return CheckResult(
-            name="ssh_root_login_disabled",
-            status="error",
-            message=f"Impossible de lire sshd_config : {error}"
-        )
-
+    return CheckResult(name="ssh_root", status="info", message="Paramètre PermitRootLogin introuvable")
 
 def run_checks():
-    return [
-        check_firewall(),
-        check_selinux(),
-        check_apparmor(),
-        check_automatic_updates(),
-        check_ssh_root_login()
-    ]
+    """Lance tous les checks enregistrés via le décorateur."""
+    results = []
+    for check_func in CHECKS:
+        results.append(check_func())
+    return results
