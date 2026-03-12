@@ -1,9 +1,12 @@
 import subprocess
-from typing import Optional, List, Tuple
-
 import os
 import ctypes
 import sys
+from typing import List, Tuple, Optional
+
+def color_text(text: str, color_code: str) -> str:
+    """Ajoute des codes couleur ANSI au texte."""
+    return f"\033[{color_code}m{text}\033[0m"
 
 def is_admin() -> bool:
     """
@@ -21,8 +24,7 @@ def is_admin() -> bool:
 
 def require_admin(name: str):
     """
-    Petit utilitaire pour retourner un CheckResult d'erreur
-    si les droits sont insuffisants pour un test spécifique.
+    Retourne un CheckResult d'erreur si les droits sont insuffisants.
     """
     from sysaudit.core.models import CheckResult
     return CheckResult(
@@ -30,24 +32,20 @@ def require_admin(name: str):
         status="error",
         message="Privilèges insuffisants (Root/Admin requis pour ce test)"
     )
+
 def run_command(command: List[str], timeout: int = 30) -> Tuple[int, str]:
     """
     Exécute une commande système de manière sécurisée et cross-platform.
     """
     try:
-        # Sur Windows, on utilise shell=True uniquement si nécessaire,
-        # mais ici la liste d'arguments est plus sûre.
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            encoding="utf-8",      # On force l'UTF-8
-            errors="replace",      # Remplace les caractères invalides au lieu de crash
-            timeout=timeout        # Évite les blocages infinis
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout
         )
-
-        # On combine stdout et stderr car certaines commandes
-        # écrivent leurs infos sur stderr (ex: sshd -T)
         output = (result.stdout + result.stderr).strip()
         return result.returncode, output
 
@@ -57,7 +55,6 @@ def run_command(command: List[str], timeout: int = 30) -> Tuple[int, str]:
         return 127, f"Commande introuvable : {command[0]}"
     except Exception as error:
         return 1, f"Erreur système : {str(error)}"
-
 
 def command_check(
         name: str,
@@ -70,17 +67,13 @@ def command_check(
         unexpected_prefix: str = "Réponse inattendue"
 ):
     """
-    Exécute une commande et analyse la sortie par rapport à des motifs (patterns).
+    Exécute une commande et analyse la sortie par rapport à des motifs.
     """
-    # Import local pour éviter les imports circulaires
     from sysaudit.core.models import CheckResult
 
     returncode, output = run_command(command)
-
-    # On normalise en minuscules pour la comparaison
     output_lower = output.lower()
 
-    # Si la commande a échoué (code de retour différent de 0)
     if returncode != 0:
         return CheckResult(
             name=name,
@@ -88,25 +81,14 @@ def command_check(
             message=f"{error_prefix} ({returncode}) : {output}"
         )
 
-    # 1. Vérification des succès
     for pattern in ok_patterns:
         if pattern.lower() in output_lower:
-            return CheckResult(
-                name=name,
-                status="ok",
-                message=ok_message
-            )
+            return CheckResult(name=name, status="ok", message=ok_message)
 
-    # 2. Vérification des échecs connus
     for pattern in fail_patterns:
         if pattern.lower() in output_lower:
-            return CheckResult(
-                name=name,
-                status="fail",
-                message=fail_message
-            )
+            return CheckResult(name=name, status="fail", message=fail_message)
 
-    # 3. Cas non géré
     return CheckResult(
         name=name,
         status="error",
