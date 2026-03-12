@@ -1,6 +1,35 @@
 import subprocess
 from typing import Optional, List, Tuple
 
+import os
+import ctypes
+import sys
+
+def is_admin() -> bool:
+    """
+    Vérifie si l'utilisateur actuel possède les privilèges Administrateur ou Root.
+    """
+    try:
+        if sys.platform == "win32":
+            # Pour Windows : vérifie si l'utilisateur appartient au groupe Admin
+            return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        else:
+            # Pour Linux/macOS : vérifie l'ID de l'utilisateur (Root = 0)
+            return os.getuid() == 0
+    except Exception:
+        return False
+
+def require_admin(name: str):
+    """
+    Petit utilitaire pour retourner un CheckResult d'erreur
+    si les droits sont insuffisants pour un test spécifique.
+    """
+    from sysaudit.core.models import CheckResult
+    return CheckResult(
+        name=name,
+        status="error",
+        message="Privilèges insuffisants (Root/Admin requis pour ce test)"
+    )
 def run_command(command: List[str], timeout: int = 30) -> Tuple[int, str]:
     """
     Exécute une commande système de manière sécurisée et cross-platform.
