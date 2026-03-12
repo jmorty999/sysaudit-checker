@@ -1,111 +1,95 @@
 from sysaudit.core.models import CheckResult
 from sysaudit.core.util import command_check, run_command
 
-#checks must be validated on a windows env
+CHECKS = []
+
+def register_check(func):
+    CHECKS.append(func)
+    return func
+
 def powershell_command(script: str) -> list[str]:
+    """Prépare une commande PowerShell propre."""
     return [
-        "powershell",
+        "powershell.exe",
         "-NoProfile",
+        "-NonInteractive",
         "-ExecutionPolicy",
         "Bypass",
         "-Command",
-        script
+        f"$ProgressPreference = 'SilentlyContinue'; {script}"
     ]
 
-
+@register_check
 def check_firewall():
+    # On vérifie s'il existe au moins un profil désactivé
     return command_check(
         name="firewall_enabled",
         command=powershell_command(
-            "(Get-NetFirewallProfile | Select-Object -ExpandProperty Enabled) -join ','"
+            "if ((Get-NetFirewallProfile | Where-Object {$_.Enabled -eq 'False'})) { 'fail' } else { 'ok' }"
         ),
-        ok_patterns=["true,true,true", "true, true, true"],
-        fail_patterns=["false"],
-        ok_message="Le pare-feu Windows est activé sur tous les profils",
-        fail_message="Le pare-feu Windows n'est pas activé sur tous les profils"
+        ok_patterns=["ok"],
+        fail_patterns=["fail"],
+        ok_message="Tous les profils du pare-feu Windows sont actifs",
+        fail_message="Au moins un profil du pare-feu Windows est désactivé"
     )
 
-
+@register_check
 def check_defender():
     return command_check(
         name="defender_enabled",
-        command=powershell_command(
-            "(Get-MpComputerStatus).AntivirusEnabled"
-        ),
-        ok_patterns=["true"],
-        fail_patterns=["false"],
+        command=powershell_command("(Get-MpComputerStatus).AntivirusEnabled"),
+        ok_patterns=["True"],
+        fail_patterns=["False"],
         ok_message="Microsoft Defender Antivirus est activé",
         fail_message="Microsoft Defender Antivirus est désactivé"
     )
 
-
+@register_check
 def check_bitlocker():
-    returncode, output = run_command(
-        powershell_command(
-            "(Get-BitLockerVolume -MountPoint $env:SystemDrive).ProtectionStatus"
-        )
+    # Vérification du statut de protection (1 = On, 0 = Off)
+    rc, output = run_command(
+        powershell_command("(Get-BitLockerVolume -MountPoint $env:SystemDrive).ProtectionStatus")
     )
-    output_lower = output.lower()
 
-    if returncode != 0:
+    if rc != 0:
         return CheckResult(
-            name="bitlocker_enabled",
+            name="bitlocker_status",
             status="error",
-            message=f"Commande échouée : {output}"
+            message="Erreur (Droits insuffisants ? Lancer en tant qu'Admin)"
         )
 
-    if "1" in output_lower or "on" in output_lower:
-        return CheckResult(
-            name="bitlocker_enabled",
-            status="ok",
-            message="BitLocker est activé sur le disque système"
-        )
+    clean_output = output.strip()
+    if clean_output == "1":
+        return CheckResult(name="bitlocker", status="ok", message="BitLocker est activé sur C:")
 
-    if "0" in output_lower or "off" in output_lower:
-        return CheckResult(
-            name="bitlocker_enabled",
-            status="fail",
-            message="BitLocker est désactivé sur le disque système"
-        )
+    return CheckResult(name="bitlocker", status="fail", message="BitLocker est désactivé sur C:")
 
-    return CheckResult(
-        name="bitlocker_enabled",
-        status="error",
-        message=f"Réponse inattendue : {output}"
-    )
-
-
+@register_check
 def check_smartscreen():
+    # Vérifie le registre pour SmartScreen
     return command_check(
         name="smartscreen_enabled",
         command=powershell_command(
             "Get-ItemPropertyValue -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer' -Name SmartScreenEnabled"
         ),
-        ok_patterns=["requireadmin", "warn"],
-        fail_patterns=["off"],
-        ok_message="SmartScreen est activé",
+        ok_patterns=["RequireAdmin", "Warn"],
+        fail_patterns=["Off"],
+        ok_message="SmartScreen est configuré (Safe)",
         fail_message="SmartScreen est désactivé"
     )
 
-
+@register_check
 def check_windows_update():
+    # Vérifie si le service n'est pas désactivé
     return command_check(
-        name="windows_update_service_enabled",
-        command=powershell_command(
-            "(Get-Service wuauserv).StartType"
-        ),
-        ok_patterns=["automatic", "manual"],
-        fail_patterns=["disabled"],
-        ok_message="Le service Windows Update est disponible",
+        name="windows_update_service",
+        command=powershell_command("(Get-Service wuauserv).StartType"),
+        ok_patterns=["Automatic", "Manual"],
+        fail_patterns=["Disabled"],
+        ok_message="Le service Windows Update est opérationnel",
         fail_message="Le service Windows Update est désactivé"
     )
 
-
 def run_checks():
-    return [
-        check_firewall(),
-        check_defender(),
-        check_bitlocker(),
-        check_smartscreen(),
-        check_windows_update()
-    ]
+    """Exécute tous les tests Windows enregistrés."""
+    return [check() for check in CHECKS]
